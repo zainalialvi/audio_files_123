@@ -5,7 +5,7 @@ from pydub import AudioSegment
 import zipfile
 
 # Streamlit App Title
-st.title("🎵 Bulk Audio Converter - WAV 8kHz PCM")
+st.title("🎵 IDRAK Audio Converter")
 
 # Sidebar File Uploader
 st.sidebar.header("📂 Upload Your Audio Files")
