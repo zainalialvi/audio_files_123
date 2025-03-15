@@ -20,18 +20,6 @@ os.makedirs(converted_folder, exist_ok=True)
 
 
 def convert_audio(input_file, output_directory, file_name):
-    """
-    Convert audio files to WAV format with 16-bit PCM and 8kHz sample rate.
-    Replace spaces with underscores in the output filename.
-
-    Args:
-        input_file (BytesIO): Uploaded file stream.
-        output_directory (str): Directory for the output file.
-        file_name (str): Name of the uploaded file.
-
-    Returns:
-        str: Path to the converted file
-    """
     try:
         file_base, file_ext = os.path.splitext(file_name)
 
@@ -69,12 +57,19 @@ def zip_directory(folder_path, zip_path):
                 zipf.write(file_path, os.path.relpath(file_path, folder_path))  # Keep relative path inside ZIP
 
 
-# Process files on button click
 converted_files = []
 
 if st.button("🚀 Convert All Uploaded Files"):
     if uploaded_files:
         st.write("### Processing Files... ✅")
+
+        # Clear previous converted files and ZIP file
+        if os.path.exists(converted_folder):
+            shutil.rmtree(converted_folder)
+        os.makedirs(converted_folder, exist_ok=True)
+
+        if os.path.exists(zip_output_path):
+            os.remove(zip_output_path)
 
         for uploaded_file in uploaded_files:
             file_name = uploaded_file.name
@@ -95,7 +90,6 @@ if st.button("🚀 Convert All Uploaded Files"):
 
     else:
         st.error("❌ No files uploaded. Please upload .mp3 or .wav files.")
-
 # Download ZIP button at the end
 if os.path.exists(zip_output_path):
     with open(zip_output_path, "rb") as f:
