@@ -3,9 +3,13 @@ import shutil
 import streamlit as st
 from pydub import AudioSegment
 import zipfile
+import librosa
+import numpy as np
+import soundfile as sf
+import tempfile
 
 # Streamlit App Title
-st.title("🎵 IDRAK Audio Converter")
+st.title("🎵 IDRAK Audio Converter (Fixed)")
 
 # Sidebar File Uploader
 st.sidebar.header("📂 Upload Your Audio Files")
@@ -15,38 +19,50 @@ uploaded_files = st.sidebar.file_uploader(
 
 # Set up directories
 converted_folder = os.path.join(os.getcwd(), "converted_sounds")
-zip_output_path = os.path.join(os.getcwd(), "converted_audios.zip")  # ZIP stored in working directory
+zip_output_path = os.path.join(os.getcwd(), "converted_audios.zip")
 os.makedirs(converted_folder, exist_ok=True)
-
 
 def convert_audio(input_file, output_directory, file_name):
     try:
         file_base, file_ext = os.path.splitext(file_name)
-
-        # Replace spaces with underscores in filename
-        file_base = file_base.replace(" ", "_")
-
-        # Create output file path
+        file_base = file_base.replace(" ", "_")  # Replace spaces with underscores
         output_file = os.path.join(output_directory, f"{file_base}.wav")
 
-        # Load audio file from memory (uploaded file)
-        audio = AudioSegment.from_file(input_file, format=file_ext[1:])  # Extract format from extension
+        # Load audio using librosa for high-quality resampling
+        with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as temp_file:
+            temp_file.write(input_file.read())
+            temp_file_path = temp_file.name
 
-        # Convert to mono if stereo
-        if audio.channels > 1:
-            audio = audio.set_channels(1)
+        # Load audio with librosa
+        audio, sr = librosa.load(temp_file_path, sr=None, mono=True)
+        os.unlink(temp_file_path)  # Clean up temporary file
 
-        # Set sample rate to 8kHz and bit depth to 16
-        audio = audio.set_frame_rate(8000).set_sample_width(2)
+        # Resample to 8000 Hz using librosa's high-quality resampler
+        target_sr = 8000
+        audio_resampled = librosa.resample(audio, orig_sr=sr, target_sr=target_sr)
 
-        # Export the audio file
-        audio.export(output_file, format="wav")
+        # Normalize audio to prevent clipping
+        audio_normalized = audio_resampled / np.max(np.abs(audio_resampled)) * 0.9
 
+        # Convert to 16-bit PCM
+        audio_16bit = (audio_normalized * 32767).astype(np.int16)
+
+        # Save as WAV using soundfile (pydub for final export)
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav:
+            sf.write(temp_wav.name, audio_16bit, target_sr, subtype='PCM_16')
+            temp_wav_path = temp_wav.name
+
+        # Load with pydub to ensure proper WAV formatting
+        audio_segment = AudioSegment.from_file(temp_wav_path, format="wav")
+        audio_segment = audio_segment.set_channels(1).set_frame_rate(8000).set_sample_width(2)
+        audio_segment.export(output_file, format="wav")
+
+        os.unlink(temp_wav_path)  # Clean up temporary WAV
         return output_file
 
     except Exception as e:
+        st.error(f"Error processing {file_name}: {str(e)}")
         return None
-
 
 def zip_directory(folder_path, zip_path):
     """Creates a zip file from a folder."""
@@ -54,8 +70,7 @@ def zip_directory(folder_path, zip_path):
         for root, _, files in os.walk(folder_path):
             for file in files:
                 file_path = os.path.join(root, file)
-                zipf.write(file_path, os.path.relpath(file_path, folder_path))  # Keep relative path inside ZIP
-
+                zipf.write(file_path, os.path.relpath(file_path, folder_path))
 
 converted_files = []
 
@@ -90,7 +105,8 @@ if st.button("🚀 Convert All Uploaded Files"):
 
     else:
         st.error("❌ No files uploaded. Please upload .mp3 or .wav files.")
-# Download ZIP button at the end
+
+# Download ZIP button
 if os.path.exists(zip_output_path):
     with open(zip_output_path, "rb") as f:
         st.download_button(
